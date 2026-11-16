@@ -163,11 +163,12 @@ test('超时自动出牌，牌墙用尽判流局，既有暗杠收支保留', ()
   assert.deepEqual(g.players.map(p => p.chips), [430, 390, 390, 390]);
 });
 
-test('庄家自摸留庄，闲家自摸或接炮胡的人接庄，流局顺位', () => {
+test('自摸由胡牌者坐庄，点炮由放炮者坐庄，流局由庄家下家坐庄', () => {
   const outcomes = [
     { dealer: 2, winner: 2, source: null, next: 2 },
     { dealer: 2, winner: 3, source: null, next: 3 },
-    { dealer: 2, winner: 1, source: 0, next: 1 },
+    { dealer: 2, winner: 1, source: 0, next: 0 },
+    { dealer: 2, winner: 1, source: 2, next: 2 },
     { dealer: 3, winner: null, source: null, next: 0 },
   ];
   for (const { dealer, winner, source, next } of outcomes) {

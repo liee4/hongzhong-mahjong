@@ -8,7 +8,7 @@ const CLAIM_MS = 8_000;
 const seats = [0, 1, 2, 3];
 const nextSeat = (seat, offset = 1) => (seat + offset) % 4;
 const count = (tiles, value) => tiles.filter(tile => tile === value).length;
-const nextDealer = game => game.result.wins?.length > 1 ? game.result.source : (game.result.winner ?? nextSeat(game.dealer));
+const nextDealer = game => game.result.source ?? game.result.winner ?? nextSeat(game.dealer);
 
 function recordEvent(game, event) {
   game.event = { ...event, id: (game.event?.id ?? 0) + 1 };
