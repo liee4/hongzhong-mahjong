@@ -306,11 +306,19 @@ function showResult(force = false) {
   const canShow = !$('rules-dialog').open && !$('exit-dialog').open && !$('sound-dialog').open;
   const willOpen = canShow && !dialog.open && (force || resultShown !== view.phaseId);
   if (!willOpen && !dialog.open) return;
-  const draw = result.winner === null;
+  const wins = result.wins ?? (result.winner === null ? [] : [{ ...result, seat: result.winner }]);
+  const first = wins[0];
   const method = result.source === null ? (result.kongDraw ? '杠开自摸' : '自摸') : '接炮';
-  const outcome = draw ? '流局' : `${view.players[result.winner].name} ${method}`;
-  const factors = [result.red && `红中 ${result.red} 番`, result.flowers && `花 ${result.flowers} 番`, result.kongDraw && '杠开 1 番'].filter(Boolean);
-  const payout = draw ? '流局结算不转移筹码，局内已经结付的暗杠照常计入。' : `${result.fan} 番${factors.length ? ` · ${factors.join(' · ')}` : ''} · 胡牌收取 ${result.delta[result.winner]} 枚`;
+  let outcome = '流局';
+  if (wins.length > 1) outcome = wins.length === 2 ? '一炮双响' : '一炮三响';
+  else if (first) outcome = `${view.players[first.seat].name} ${method}`;
+  const breakdown = wins.map(({ seat, red, flowers, kongDraw, fan, winningHand }) => {
+    const name = escape(view.players[seat].name);
+    const factors = [red && `红中 ${red} 番`, flowers && `花 ${flowers} 番`, kongDraw && '杠开 1 番'].filter(Boolean);
+    const payout = [`${fan} 番`, ...factors, `胡牌收取 ${result.delta[seat]} 枚`].join(' · ');
+    return `<section><p>${wins.length > 1 ? `${name} 接炮` : '胡牌手牌'}</p><div class="result-detail">${payout}</div>
+      <div class="result-tiles">${winningHand.map(tile => tileHtml(tile)).join('')}</div></section>`;
+  }).join('');
   const rows = view.players.map((p, seat) => {
     const diff = result.roundDelta[seat];
     return `<li><span>${escape(p.name)}${seat === view.seat ? '（你）' : ''}</span><span class="${diff > 0 ? 'gain' : diff < 0 ? 'loss' : ''}">${diff > 0 ? '+' : ''}${diff}</span><span>${p.chips} 枚</span></li>`;
@@ -318,7 +326,7 @@ function showResult(force = false) {
   const offline = view.players.some(p => !p.connected);
   const banker = view.nextDealer === null ? '' : `<p>下局庄家：${escape(view.players[view.nextDealer].name)}${view.nextDealer === view.dealer ? '（连庄）' : ''}</p>`;
   dialog.innerHTML = `<div class="modal-head"><h2 id="result-title">${escape(outcome)}</h2><button class="quiet close" type="button" data-close aria-label="关闭">×</button></div>
-    <div class="result-detail">${payout}</div>${draw ? '' : `<p>胡牌手牌</p><div class="result-tiles">${result.winningHand.map(tile => tileHtml(tile)).join('')}</div>`}
+    ${first ? breakdown : '<div class="result-detail">流局结算不转移筹码，局内已经结付的暗杠照常计入。</div>'}
     <ul class="result-list" aria-label="本局变化和剩余筹码">${rows}</ul>
     ${banker}
     ${result.tableEnded ? '<p>有牌友筹码归零，本桌已结束。</p>' : offline ? '<p>等待四位牌友重新在线。</p>' : ''}

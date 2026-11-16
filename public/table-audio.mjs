@@ -126,7 +126,7 @@ export function createTableAudio(initial = {}, env = globalThis) {
       const event = view.event;
       if (!previous || !Number.isInteger(event?.id) || event.id === previous.event?.id) return;
       if (event.type === 'discard') playEffect('discard');
-      else if (event.seat !== view.seat) {
+      else if (event.seat !== view.seat && !event.seats?.includes(view.seat)) {
         const name = callSounds[event.type];
         if (name) { playEffect(name); playVoice(name); }
       }

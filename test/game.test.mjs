@@ -75,6 +75,23 @@ test('点杠只记花，明杠杠开、花番、红中共 3 番', () => {
   assert.deepEqual(g.players.map(p => p.chips), [320, 640, 320, 320]);
 });
 
+test('有点杠选项时牌桌隐藏碰，胡仍可选', () => {
+  const g = game();
+  g.players[0].hand = [1];
+  g.players[1].hand = [0, 1, 1, 1, 2, 3, 4, 5, 9, 10, 11, 25, 25];
+  applyAction(g, 0, { type: 'discard', tile: 1 }, 10);
+  assert.deepEqual(viewGame(g, 1).actions.claims, ['hu', 'exposedKong']);
+});
+
+test('牌墙摸空无法点杠时牌桌仍显示碰', () => {
+  const g = game();
+  g.wall = [];
+  g.players[0].hand = [0];
+  g.players[1].hand = [0, 0, 0, 3, 4, 5, 9, 10, 11, 15, 16, 17, RED];
+  applyAction(g, 0, { type: 'discard', tile: 0 }, 10);
+  assert.deepEqual(viewGame(g, 1).actions.claims, ['pung']);
+});
+
 test('补杠记一番花，胡牌赔付封在余额内', () => {
   const g = game();
   g.players[0].melds = [{ tile: 0, type: 'pung' }];
@@ -87,18 +104,51 @@ test('补杠记一番花，胡牌赔付封在余额内', () => {
   assert.equal(g.result.tableEnded, true);
 });
 
-test('胡牌优先于碰，多家胡按出牌者之后的座位顺序', () => {
+test('一炮双响优先于碰，两家分别结算，放炮者接庄', () => {
   const g = game();
+  g.dealer = 2;
+  g.wall = [5];
   g.players[0].hand = [25];
   g.players[1].hand = plain.slice(0, 13);
   g.players[2].hand = [25, 25];
-  g.players[3].hand = [0, 1, 2, 3, 4, 5, 9, 10, 11, 24, 26, 20, 20];
+  g.players[3].hand = [0, 1, 2, 3, 4, 5, 24, 26, 20, 20];
+  g.players[3].melds = [{ tile: 12, type: 'exposedKong', source: 0 }];
+  g.players[3].flowers = 1;
   applyAction(g, 0, { type: 'discard', tile: 25 }, 10);
   applyAction(g, 2, { type: 'pung' }, 20);
   applyAction(g, 3, { type: 'hu' }, 30);
   assert.equal(g.phase, 'claim');
   applyAction(g, 1, { type: 'hu' }, 40);
-  assert.equal(g.result.winner, 1);
+  const { result, nextDealer, event } = viewGame(g, 2);
+  assert.deepEqual(result.wins.map(({ seat, fan }) => [seat, fan]), [[1, 0], [3, 1]]);
+  assert.deepEqual(result.wins[0].winningHand, plain);
+  assert.deepEqual(result.wins[1].winningHand, [0, 1, 2, 3, 4, 5, 20, 20, 24, 25, 26]);
+  assert.deepEqual(result.delta, [-30, 10, 0, 20]);
+  assert.deepEqual(result.roundDelta, result.delta);
+  assert.deepEqual(event.seats, [1, 3]);
+  assert.equal(nextDealer, 0);
+  startRound(g, 50);
+  assert.equal(g.dealer, 0);
+});
+
+test('三家接炮都算胡，放炮者的余额不足时按比例赔付', () => {
+  const g = game();
+  g.players[0].hand = [25];
+  g.players[0].chips = 17;
+  g.roundStart[0] = 17;
+  g.players[1].hand = plain.slice(0, 13);
+  g.players[2].hand = [6, 7, 8, 12, 13, 14, 18, 19, 20, 21, 21, 24, 26];
+  g.players[3].hand = [0, 1, 2, 3, 4, 5, 24, 26, 20, 20];
+  g.players[3].melds = [{ tile: 23, type: 'addedKong', source: 0 }];
+  g.players[3].flowers = 1;
+  applyAction(g, 0, { type: 'discard', tile: 25 }, 10);
+  applyAction(g, 3, { type: 'hu' }, 20);
+  applyAction(g, 2, { type: 'hu' }, 30);
+  applyAction(g, 1, { type: 'hu' }, 40);
+  assert.deepEqual(g.result.wins.map(win => win.seat), [1, 2, 3]);
+  assert.deepEqual(g.result.delta, [-17, 4, 4, 9]);
+  assert.deepEqual(g.players.map(p => p.chips), [0, 404, 404, 409]);
+  assert.equal(g.result.tableEnded, true);
 });
 
 test('超时自动出牌，牌墙用尽判流局，既有暗杠收支保留', () => {

@@ -31,12 +31,14 @@ test('本地点击和对手动作各响一次，音乐和音效可分别关闭',
   audio.receive(theirKong, ownPung);
   audio.receive(theirKong, theirKong);
   audio.playAction('hu');
+  const doubleHu = { seat: 0, event: { id: 3, type: 'hu', seat: 1, seats: [1, 0] } };
+  audio.receive(doubleHu, theirKong);
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(voices, ['碰', '杠', '胡']);
   assert.deepEqual(sounds.sort(), ['/audio/hu.wav', '/audio/kong.wav', '/audio/music.wav', '/audio/pung.wav']);
 
   audio.configure({ music: false, effects: false, voice: false });
-  audio.receive({ seat: 0, event: { id: 3, type: 'discard', seat: 1 } }, theirKong);
+  audio.receive({ seat: 0, event: { id: 4, type: 'discard', seat: 1 } }, doubleHu);
   audio.playAction('hu');
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(stops, 1);

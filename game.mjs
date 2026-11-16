@@ -8,7 +8,7 @@ const CLAIM_MS = 8_000;
 const seats = [0, 1, 2, 3];
 const nextSeat = (seat, offset = 1) => (seat + offset) % 4;
 const count = (tiles, value) => tiles.filter(tile => tile === value).length;
-const nextDealer = game => game.result.winner ?? nextSeat(game.dealer);
+const nextDealer = game => game.result.wins?.length > 1 ? game.result.source : (game.result.winner ?? nextSeat(game.dealer));
 
 function recordEvent(game, event) {
   game.event = { ...event, id: (game.event?.id ?? 0) + 1 };
@@ -105,7 +105,7 @@ export function startRound(game, now = Date.now()) {
 
 function draw(game, seat, now, afterKong = false) {
   const tile = afterKong ? game.wall.pop() : game.wall.shift();
-  if (tile === undefined) return finish(game, null, null, now);
+  if (tile === undefined) return finish(game, [], null, now);
   game.turn = seat;
   game.drawn = tile;
   game.afterKong = afterKong;
@@ -113,32 +113,54 @@ function draw(game, seat, now, afterKong = false) {
   enter(game, 'turn', now, TURN_MS);
 }
 
-function payout(game, winner, payers, charge) {
-  const delta = [0, 0, 0, 0];
+function payout(game, winner, payers, charge, delta = [0, 0, 0, 0]) {
   for (const seat of payers) {
     const paid = Math.min(charge, game.players[seat].chips);
     game.players[seat].chips -= paid;
     game.players[winner].chips += paid;
-    delta[seat] = -paid;
+    delta[seat] -= paid;
     delta[winner] += paid;
   }
-  return delta;
 }
 
-function finish(game, winner, source, now) {
-  const player = winner === null ? null : game.players[winner];
-  const red = player ? count(player.hand, RED) : 0;
-  const flowers = player?.flowers ?? 0;
-  const kongDraw = player && source === null && game.afterKong ? 1 : 0;
-  const fan = red + flowers + kongDraw;
-  const delta = player ? payout(game, winner, source === null ? seats.filter(seat => seat !== winner) : [source], STAKE * (2 ** fan)) : [0, 0, 0, 0];
+function capDiscardCharges(charges, balance) {
+  const total = charges.reduce((sum, charge) => sum + charge, 0);
+  if (balance >= total) return charges;
+
+  const shares = charges.map(charge => balance * charge);
+  const payments = shares.map(share => Math.floor(share / total));
+  const remaining = balance - payments.reduce((sum, paid) => sum + paid, 0);
+  const order = shares.map((share, index) => ({ index, remainder: share % total }));
+  order.sort((a, b) => b.remainder - a.remainder);
+  for (const { index } of order.slice(0, remaining)) payments[index]++;
+  return payments;
+}
+
+function finish(game, winners, source, now) {
+  const wins = winners.map(seat => {
+    const { hand, flowers } = game.players[seat];
+    const red = count(hand, RED);
+    const kongDraw = source === null && game.afterKong ? 1 : 0;
+    const winningHand = source === null ? [...hand] : [...hand, game.discard.tile];
+    return { seat, red, flowers, kongDraw, fan: red + flowers + kongDraw, winningHand: winningHand.sort((a, b) => a - b) };
+  });
+  const charges = wins.map(win => STAKE * (2 ** win.fan));
+  const payments = source === null ? charges : capDiscardCharges(charges, game.players[source].chips);
+  const delta = [0, 0, 0, 0];
+  for (const [index, { seat }] of wins.entries()) {
+    const payers = source === null ? seats.filter(other => other !== seat) : [source];
+    payout(game, seat, payers, payments[index], delta);
+  }
+
+  const first = wins[0];
   game.result = {
-    winner, source, red, flowers, kongDraw, fan, delta,
+    winner: first?.seat ?? null, source, wins, delta,
+    red: first?.red ?? 0, flowers: first?.flowers ?? 0, kongDraw: first?.kongDraw ?? 0, fan: first?.fan ?? 0,
+    winningHand: first?.winningHand ?? [],
     roundDelta: game.players.map((p, seat) => p.chips - game.roundStart[seat]),
     tableEnded: game.players.some(p => p.chips === 0),
-    winningHand: player ? [...player.hand, ...(source === null ? [] : [game.discard.tile])].sort((a, b) => a - b) : [],
   };
-  if (player) recordEvent(game, { type: 'hu', seat: winner });
+  if (first) recordEvent(game, { type: 'hu', seat: first.seat, seats: winners });
   game.discard = null;
   game.claims = {};
   enter(game, 'result', now);
@@ -175,8 +197,8 @@ function turnActions(game, seat) {
 function resolveClaim(game, now) {
   const { seat: source, tile } = game.discard;
   const ordered = [1, 2, 3].map(offset => nextSeat(source, offset));
-  const winner = ordered.find(seat => game.claims[seat] === 'hu');
-  if (winner !== undefined) return finish(game, winner, source, now);
+  const winners = ordered.filter(seat => game.claims[seat] === 'hu');
+  if (winners.length) return finish(game, winners, source, now);
   const kongSeat = ordered.find(seat => game.claims[seat] === 'exposedKong');
   const receiver = kongSeat ?? ordered.find(seat => game.claims[seat] === 'pung');
   game.claims = {};
@@ -212,7 +234,7 @@ export function applyAction(game, seat, action, now = Date.now()) {
   if (game.phase !== 'turn' || game.turn !== seat) throw new Error('现在还没轮到你。');
   const player = game.players[seat];
   const actions = turnActions(game, seat);
-  if (action.type === 'hu' && actions.hu) return finish(game, seat, null, now);
+  if (action.type === 'hu' && actions.hu) return finish(game, [seat], null, now);
 
   const tile = action.tile;
   if (action.type === 'kong') {
@@ -335,6 +357,8 @@ export function viewGame(game, seat) {
   const own = game.players[seat];
   const ownTurn = game.phase === 'turn' && game.turn === seat;
   const canClaim = game.phase === 'claim' && !Object.hasOwn(game.claims, seat);
+  const claims = canClaim ? claimActions(game, seat) : [];
+  const visibleClaims = claims.includes('exposedKong') ? claims.filter(type => type !== 'pung') : claims;
   const drawn = ownTurn ? game.drawn : null;
   const hand = [...own.hand];
   if (drawn !== null) removeTiles(hand, drawn, 1);
@@ -346,7 +370,7 @@ export function viewGame(game, seat) {
     nextDealer: game.result && !game.result.tableEnded ? nextDealer(game) : null,
     hand, drawn, lastDiscard: game.lastDiscard, discard: game.discard, result: game.result,
     listening: listeningInfo(game, seat, hand, drawn, ownTurn),
-    actions: ownTurn ? turnActions(game, seat) : { claims: canClaim ? claimActions(game, seat) : [] },
+    actions: ownTurn ? turnActions(game, seat) : { claims: visibleClaims },
     event: game.event?.type === 'concealedKong' && game.event.seat !== seat ? { ...game.event, tile: null } : game.event,
     players: game.players.map((p, index) => p && ({
       name: p.name, isBot: Boolean(p.isBot), chips: p.chips, handCount: p.hand.length, flowers: p.flowers, river: p.river,
