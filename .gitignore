@@ -1,0 +1,12 @@
+/data/
+/data-lan/
+/data-online/
+/node_modules/
+/cloudflared.exe
+/cloudflared.exe.exe
+/config.yml
+/config.yaml
+/.cloudflared/
+.env
+.env.*
+*.log
