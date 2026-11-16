@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101821">
+  <meta name="description" content="红中麻将四人好友房，输入房间码即可同桌。">
+  <title>红中麻将 · 好友牌桌</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">中</span><div><h1>红中麻将</h1><span>好友牌桌</span></div></div>
+      <div class="toolbar">
+        <button class="room-code quiet" id="copy-code" type="button" hidden><span>房间码</span><b id="code-label"></b><span class="copy-icon" aria-hidden="true"></span></button>
+        <button class="quiet sort-toggle" id="auto-sort" type="button" aria-label="自动理牌" aria-pressed="true" hidden><span class="sort-auto">自动</span>理牌</button>
+        <button class="quiet" id="rules-button" type="button">规则</button>
+        <button class="quiet" id="exit-button" type="button" hidden>离桌</button>
+      </div>
+    </header>
+
+    <main class="board" id="board" aria-label="四人麻将牌桌">
+      <div class="felt" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="entry-art" aria-hidden="true" id="entry-art"></div>
+      <section class="entry" id="entry" aria-labelledby="entry-title">
+        <div class="entry-heading"><span class="entry-mark" aria-hidden="true">中</span><div><h2 id="entry-title">好友房</h2><p>邀请牌友，或用人机补齐座位</p></div></div>
+        <form id="entry-form">
+          <label for="name">昵称</label>
+          <input id="name" name="nickname" type="text" maxlength="12" placeholder="输入你的昵称" autocomplete="nickname" required>
+          <button class="primary full" id="create-room" type="submit" name="intent" value="create">创建房间</button>
+          <div class="join-row"><label for="code">已有房间</label><div><input id="code" name="code" type="text" maxlength="6" placeholder="输入 6 位房间码" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="secondary" id="join-room" type="submit" name="intent" value="join">加入</button></div></div>
+        </form>
+        <button class="resume quiet" id="resume-button" type="button" hidden>回到上次的房间</button>
+        <p id="entry-error" class="form-error" role="alert" hidden></p>
+      </section>
+
+      <section class="table" id="table" aria-label="当前牌局" hidden>
+        <div class="seats" id="seats"></div>
+        <div id="rivers" class="rivers"></div>
+        <div class="table-display" id="table-display"></div>
+        <div class="waiting" id="waiting" hidden></div>
+        <div class="rack-controls">
+          <div class="listening" id="listening" aria-live="polite" hidden></div>
+          <div class="action-zone" id="action-zone"></div>
+        </div>
+        <div class="rack" id="rack" aria-label="我的手牌"></div>
+      </section>
+      <div class="toast" id="toast" role="status" hidden></div>
+    </main>
+
+    <aside class="listening-rail" id="listening-rail" aria-label="当前听牌" hidden>
+      <button class="listen-toggle" id="listen-toggle" type="button" aria-label="听" aria-expanded="false" aria-controls="listen-detail">听</button>
+      <div class="listening" id="listen-detail" hidden></div>
+    </aside>
+
+    <footer class="bottom-bar"><span class="connection" id="connection" data-state="idle"><i></i><span id="connection-label">好友联机</span></span><span id="status" role="status">创建房间，或输入好友的房间码</span><span class="footer-tools"><button class="quiet sound-button" id="sound-button" type="button">声音</button><span class="stake">底注 <b>10</b><span class="coin" aria-hidden="true"></span></span></span></footer>
+  </div>
+
+  <dialog id="rules-dialog" class="modal" aria-labelledby="rules-title">
+    <div class="modal-head"><h2 id="rules-title">牌桌规则</h2><button class="quiet close" data-close type="button" aria-label="关闭">×</button></div>
+    <dl class="rule-list">
+      <div><dt>摸打</dt><dd>万、筒、条加四张红中，共 112 张。可碰、杠，不吃。</dd></div>
+      <div><dt>理牌</dt><dd>新摸的牌先单独放在最右边。默认按花色和点数整理已有手牌，也可拖动换位。</dd></div>
+      <div><dt>听牌</dt><dd>轮到自己时，鼠标移到手牌上可预览打出后的听牌。已经听牌时，点右侧“听”查看。余量扣除自己已知的牌和桌面明牌。</dd></div>
+      <div><dt>庄家</dt><dd>庄家自摸连庄。闲家自摸或接炮胡，由胡牌的人接庄。流局由庄家的下家坐庄。</dd></div>
+      <div><dt>胡牌</dt><dd>四组牌加一对将。红中能补顺子、刻子或将牌，四张红中可直接自摸。手里有红中只能自摸，无红中也能接炮。</dd></div>
+      <div><dt>暗杠</dt><dd>其他三家各付 10 枚筹码，当场结算，然后补牌。</dd></div>
+      <div><dt>番数</dt><dd>点杠和补杠每次记 1 番花。杠后补牌自摸再加 1 番，胡牌时每张红中加 1 番。</dd></div>
+      <div><dt>筹码</dt><dd>起始 400 枚，底注 10 枚，每番翻倍。自摸三家各付一份，点炮由出牌者付一份。余额不足时付到 0，若结算后有人归零则结束这桌。</dd></div>
+    </dl>
+  </dialog>
+  <dialog id="sound-dialog" class="modal sound-modal" aria-labelledby="sound-title">
+    <div class="modal-head"><h2 id="sound-title">声音</h2><button class="quiet close" data-close type="button" aria-label="关闭">×</button></div>
+    <div class="sound-options">
+      <label><span>背景音乐</span><input type="checkbox" data-sound-setting="music"></label>
+      <div class="music-volume">
+        <div><label for="music-volume">音乐音量</label><output id="music-volume-value" for="music-volume">40%</output></div>
+        <input id="music-volume" type="range" min="0" max="100" value="40" aria-valuetext="40%">
+      </div>
+      <label><span>牌桌音效</span><input type="checkbox" data-sound-setting="effects"></label>
+      <label><span>普通话配音</span><input type="checkbox" data-sound-setting="voice"></label>
+    </div>
+    <div class="sound-samples" aria-label="试听操作声音">
+      <button class="secondary" type="button" data-sound-preview="pung">试听碰</button>
+      <button class="secondary" type="button" data-sound-preview="kong">试听杠</button>
+      <button class="secondary" type="button" data-sound-preview="hu">试听胡</button>
+    </div>
+  </dialog>
+  <dialog id="result-dialog" class="modal result-modal" aria-labelledby="result-title"></dialog>
+  <dialog id="exit-dialog" class="modal exit-modal" aria-labelledby="exit-title">
+    <div class="modal-head"><h2 id="exit-title">离开牌桌</h2><button class="quiet close" data-close type="button" aria-label="关闭">×</button></div>
+    <p id="exit-text"></p>
+    <div class="dialog-actions"><button class="quiet" data-close type="button">留下</button><button class="secondary" id="confirm-exit" type="button">离桌</button></div>
+  </dialog>
+</body>
+</html>
